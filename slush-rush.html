@@ -1,0 +1,661 @@
+<title>ICEE Slush Rush</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lilita+One&family=Rubik:wght@400;600;800&family=VT323&display=swap">
+<style>
+/* Layout: one-screen arcade cabinet. LED topper, HUD, live machine canvas, five physical levers. */
+:root {
+  --cab: #0a1636;        /* cabinet navy */
+  --cab-2: #13285c;
+  --ice: #eaf6ff;        /* machine face */
+  --frost: #9fd8ff;
+  --red: #e3202f;        /* ICEE red */
+  --blue: #1b5fd9;       /* ICEE blue */
+  --led: #ffd23f;        /* topper LEDs */
+  --ink: #0a1636;
+  --good: #3ee08a;
+  --bad: #ff5a5f;
+  --display: "Lilita One", "Arial Rounded MT Bold", "Trebuchet MS", sans-serif;
+  --body: "Rubik", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --led-font: "VT323", ui-monospace, "Courier New", monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body {
+  background: radial-gradient(120% 80% at 50% 0%, var(--cab-2), var(--cab) 60%);
+  color: var(--ice);
+  font-family: var(--body);
+  overflow: hidden;
+  -webkit-user-select: none; user-select: none;
+  -webkit-touch-callout: none;
+}
+#app {
+  height: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex; flex-direction: column; gap: 8px;
+  padding-left: max(12px, env(safe-area-inset-left, 0px));
+  padding-right: max(12px, env(safe-area-inset-right, 0px));
+  padding-block: 10px;
+  box-sizing: border-box;
+}
+/* LED topper */
+#topper {
+  position: relative;
+  border-radius: 18px 18px 8px 8px;
+  background: linear-gradient(180deg, var(--red), #b5121f);
+  padding: 8px 14px 10px;
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px;
+  box-shadow: 0 0 0 3px #fff2 inset, 0 6px 24px #e3202f55;
+  overflow: hidden;
+}
+#topper::before, #topper::after {
+  content: ""; position: absolute; left: 0; right: 0; height: 5px;
+  background: radial-gradient(circle, var(--led) 0 2px, transparent 2.5px) 0 0 / 14px 5px repeat-x;
+  animation: chase 0.6s steps(2) infinite;
+}
+#topper::before { top: 1px; } #topper::after { bottom: 1px; animation-direction: reverse; }
+@keyframes chase { to { background-position: 14px 0; } }
+.logo { font-family: var(--display); font-size: clamp(24px, 6vw, 38px); line-height: 0.95; letter-spacing: 0.5px; color: #fff; text-shadow: 0 3px 0 var(--blue), 0 5px 0 #0006; }
+.logo small { display: block; font-size: 0.48em; letter-spacing: 3px; color: var(--frost); text-shadow: none; font-family: var(--body); font-weight: 800; }
+.bonus { background: #120a00; border-radius: 8px; padding: 2px 10px 4px; text-align: center; box-shadow: 0 0 0 2px #0008 inset; }
+.bonus .lbl { font: 600 10px var(--body); letter-spacing: 2px; color: #ffd23f99; text-transform: uppercase; }
+.bonus .num { font: 400 clamp(26px, 6vw, 36px)/1 var(--led-font); color: var(--led); text-shadow: 0 0 8px #ffd23faa; font-variant-numeric: tabular-nums; }
+
+/* HUD */
+#hud { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.stat { background: #ffffff10; border-radius: 10px; padding: 6px 10px; }
+.stat .lbl { font: 600 10px var(--body); letter-spacing: 2px; text-transform: uppercase; color: var(--frost); }
+.stat .val { font: 400 28px/1 var(--led-font); font-variant-numeric: tabular-nums; }
+#timebar { height: 6px; border-radius: 3px; background: #ffffff18; margin-top: 4px; overflow: hidden; }
+#timebar i { display: block; height: 100%; width: 100%; background: var(--good); transform-origin: left; }
+
+/* Order rail */
+#rail { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+#now { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; background: var(--ice); color: var(--ink); border-radius: 10px; padding: 6px 10px; font-weight: 800; }
+#now .sw { width: 22px; height: 22px; border-radius: 50%; flex: none; box-shadow: 0 0 0 2px #0002 inset; }
+#now .txt { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 15px; }
+#now .size { margin-left: auto; font-family: var(--display); font-size: 20px; color: var(--blue); }
+#next { display: flex; gap: 5px; align-items: center; }
+#next .lbl { font: 600 10px var(--body); letter-spacing: 1.5px; color: var(--frost); text-transform: uppercase; margin-right: 2px; }
+#next .chip { width: 18px; border-radius: 3px 3px 5px 5px; box-shadow: 0 0 0 2px #fff5 inset; }
+
+/* Stage */
+#stage { position: relative; flex: 1; min-height: 0; border-radius: 14px; overflow: hidden; background: var(--ice); box-shadow: 0 0 0 4px #ffffff14; }
+canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+/* Levers */
+#levers { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; touch-action: none; }
+.lever {
+  --c: #888;
+  appearance: none; border: 0; cursor: pointer; padding: 0;
+  height: clamp(78px, 14vh, 112px);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff22, #00000033), var(--c);
+  box-shadow: 0 7px 0 color-mix(in srgb, var(--c) 55%, #000), 0 9px 14px #0007, inset 0 2px 0 #fff6;
+  color: #fff; font-family: var(--display); text-shadow: 0 2px 0 #0005;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  transition: transform 60ms, box-shadow 60ms;
+  touch-action: none;
+}
+.lever .n { font-size: clamp(13px, 3.4vw, 17px); line-height: 1.05; text-align: center; padding: 0 4px; }
+.lever .k { font: 600 11px var(--body); opacity: 0.8; letter-spacing: 1px; }
+.lever.down { transform: translateY(6px); box-shadow: 0 1px 0 color-mix(in srgb, var(--c) 55%, #000), 0 2px 6px #0007, inset 0 2px 0 #fff4; }
+.lever:focus-visible { outline: 3px solid var(--led); outline-offset: 3px; }
+
+/* Overlays */
+.overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; padding: 16px; background: #0a1636d9; backdrop-filter: blur(3px); z-index: 5; }
+.card { text-align: center; max-width: 420px; display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.card h2 { font-family: var(--display); font-weight: 400; font-size: clamp(30px, 8vw, 44px); margin: 0; line-height: 1; color: #fff; text-shadow: 0 3px 0 var(--red); text-wrap: balance; }
+.card p { margin: 0; color: var(--frost); line-height: 1.45; font-size: 15px; }
+.card ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; text-align: left; font-size: 14px; color: var(--ice); }
+.card li b { color: var(--led); }
+.btn { appearance: none; border: 0; cursor: pointer; font-family: var(--display); font-size: 24px; color: #fff; background: var(--red); padding: 12px 34px; border-radius: 999px; box-shadow: 0 5px 0 #8f0f19, 0 8px 18px #0008; }
+.btn:active { transform: translateY(4px); box-shadow: 0 1px 0 #8f0f19; }
+.btn:focus-visible { outline: 3px solid var(--led); outline-offset: 3px; }
+.results { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; }
+.results div { background: #ffffff12; border-radius: 10px; padding: 8px; }
+.results .lbl { font: 600 10px var(--body); letter-spacing: 2px; text-transform: uppercase; color: var(--frost); }
+.results .val { font: 400 32px/1 var(--led-font); font-variant-numeric: tabular-nums; }
+.results .big { grid-column: 1 / -1; }
+.results .big .val { color: var(--led); font-size: 48px; text-shadow: 0 0 10px #ffd23f88; }
+.hint { font-size: 12px !important; opacity: 0.8; }
+@media (prefers-reduced-motion: reduce) { #topper::before, #topper::after { animation: none; } }
+</style>
+
+<div id="app">
+  <header id="topper">
+    <div class="logo">ICEE Slush Rush<small>SERVE 50 FOR THE BONUS</small></div>
+    <div class="bonus"><div class="lbl">Bonus</div><div class="num" id="bonusNum">500</div></div>
+  </header>
+
+  <div id="hud">
+    <div class="stat"><div class="lbl">Time</div><div class="val" id="timeVal">40.0</div><div id="timebar"><i id="timeFill"></i></div></div>
+    <div class="stat"><div class="lbl">Served</div><div class="val"><span id="cupsVal">0</span><span style="opacity:.5">/50</span></div></div>
+    <div class="stat"><div class="lbl">Tickets</div><div class="val" id="ticketVal">0</div></div>
+  </div>
+
+  <div id="rail">
+    <div id="now"><span class="sw" id="nowSw"></span><span class="txt" id="nowTxt">Waiting for customers</span><span class="size" id="nowSize"></span></div>
+    <div id="next"><span class="lbl">Next</span></div>
+  </div>
+
+  <div id="stage">
+    <canvas id="cv"></canvas>
+    <div class="overlay" id="titleScreen">
+      <div class="card">
+        <h2>Pour fast. Don't spill.</h2>
+        <p>The line is out the door. You have 40 seconds to fill as many orders as you can.</p>
+        <ul>
+          <li>Hold the <b>flavor lever</b> under the waiting cup to pour.</li>
+          <li>Let go once the slush passes the <b>fill line</b>. Stop near the top for a <b>Perfect Pour</b>.</li>
+          <li>Overflow and you lose time to <b>cleanup</b>.</li>
+          <li>Serve all <b>50</b> to win the <b>500 ticket bonus</b>.</li>
+        </ul>
+        <button class="btn" id="startBtn">Start</button>
+        <p class="hint">Keys 1–5 or A S D F G work on a keyboard.</p>
+      </div>
+    </div>
+    <div class="overlay" id="overScreen" hidden>
+      <div class="card">
+        <h2 id="overTitle">Time's up!</h2>
+        <div class="results">
+          <div class="big"><div class="lbl">Tickets won</div><div class="val" id="rTickets">0</div></div>
+          <div><div class="lbl">Cups served</div><div class="val" id="rCups">0</div></div>
+          <div><div class="lbl">Perfect pours</div><div class="val" id="rPerfect">0</div></div>
+          <div><div class="lbl">Spills</div><div class="val" id="rSpills">0</div></div>
+          <div><div class="lbl">Best</div><div class="val" id="rBest">0</div></div>
+        </div>
+        <button class="btn" id="againBtn">Play again</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="levers"></div>
+</div>
+
+<script>
+(() => {
+  const FLAVORS = [
+    { name: "Cherry",        c: "#e3202f", hi: "#ff6b74", key: ["1", "a"] },
+    { name: "Orange",        c: "#ff8a1f", hi: "#ffc077", key: ["2", "s"] },
+    { name: "Banana",        c: "#f5cf2a", hi: "#fff08a", key: ["3", "d"] },
+    { name: "Green Apple",   c: "#45c43a", hi: "#9cf08c", key: ["4", "f"] },
+    { name: "Blue Raspberry",c: "#1b6dff", hi: "#7fb2ff", key: ["5", "g"] },
+  ];
+  const SIZES = [
+    { id: "S", name: "Small",  h: 0.56, pour: 0.50, tix: 2 },
+    { id: "M", name: "Medium", h: 0.72, pour: 0.65, tix: 3 },
+    { id: "L", name: "Large",  h: 0.88, pour: 0.80, tix: 4 },
+  ];
+  const ROUND = 40, GOAL = 50, JACKPOT = 500;
+  const FILL_LINE = 0.80, PERFECT_LO = 0.88, PERFECT_HI = 0.98;
+  const CLEANUP = 1.2, WRONG_LOCK = 0.45;
+
+  const $ = id => document.getElementById(id);
+  const cv = $("cv"), ctx = cv.getContext("2d");
+  let W = 0, H = 0, dpr = 1;
+
+  // ---------- Levers ----------
+  const leverEls = FLAVORS.map((f, i) => {
+    const b = document.createElement("button");
+    b.className = "lever"; b.id = "lever" + i;
+    b.style.setProperty("--c", f.c);
+    b.innerHTML = `<span class="n">${f.name}</span><span class="k">${f.key[0]}</span>`;
+    b.addEventListener("pointerdown", e => { e.preventDefault(); b.setPointerCapture?.(e.pointerId); press(i); });
+    const up = () => release(i);
+    b.addEventListener("pointerup", up);
+    b.addEventListener("pointercancel", up);
+    b.addEventListener("lostpointercapture", up);
+    b.addEventListener("contextmenu", e => e.preventDefault());
+    $("levers").appendChild(b);
+    return b;
+  });
+  const keyMap = {};
+  FLAVORS.forEach((f, i) => f.key.forEach(k => keyMap[k] = i));
+  addEventListener("keydown", e => {
+    if (e.repeat) return;
+    const i = keyMap[e.key.toLowerCase()];
+    if (i !== undefined) { e.preventDefault(); press(i); }
+    else if ((e.key === "Enter" || e.key === " ") && G.state !== "play" && G.state !== "countdown") { e.preventDefault(); start(); }
+  });
+  addEventListener("keyup", e => { const i = keyMap[e.key.toLowerCase()]; if (i !== undefined) release(i); });
+  addEventListener("blur", () => FLAVORS.forEach((_, i) => release(i)));
+
+  // ---------- Audio ----------
+  let AC = null, pourGain, pourFilter;
+  function initAudio() {
+    if (AC) return;
+    try {
+      AC = new (window.AudioContext || window.webkitAudioContext)();
+      const len = AC.sampleRate * 2, buf = AC.createBuffer(1, len, AC.sampleRate), d = buf.getChannelData(0);
+      for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+      const src = AC.createBufferSource(); src.buffer = buf; src.loop = true;
+      pourFilter = AC.createBiquadFilter(); pourFilter.type = "bandpass"; pourFilter.Q.value = 2.5; pourFilter.frequency.value = 400;
+      pourGain = AC.createGain(); pourGain.gain.value = 0;
+      src.connect(pourFilter).connect(pourGain).connect(AC.destination); src.start();
+      AC.noiseBuf = buf;
+    } catch (_) { AC = null; }
+  }
+  function tone(freq, dur, type = "sine", vol = 0.18, when = 0, slideTo) {
+    if (!AC) return;
+    const t = AC.currentTime + when, o = AC.createOscillator(), g = AC.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g).connect(AC.destination); o.start(t); o.stop(t + dur + 0.02);
+  }
+  function splat() {
+    if (!AC) return;
+    const s = AC.createBufferSource(); s.buffer = AC.noiseBuf;
+    const f = AC.createBiquadFilter(); f.type = "lowpass"; f.frequency.setValueAtTime(1800, AC.currentTime); f.frequency.exponentialRampToValueAtTime(120, AC.currentTime + 0.5);
+    const g = AC.createGain(); g.gain.setValueAtTime(0.5, AC.currentTime); g.gain.exponentialRampToValueAtTime(0.001, AC.currentTime + 0.55);
+    s.connect(f).connect(g).connect(AC.destination); s.start(); s.stop(AC.currentTime + 0.6);
+  }
+  const sfx = {
+    serve: () => { tone(880, 0.12, "triangle", 0.15); tone(1320, 0.18, "triangle", 0.12, 0.06); },
+    perfect: () => { [1046, 1318, 1568, 2093].forEach((f, i) => tone(f, 0.14, "square", 0.06, i * 0.05)); },
+    wrong: () => tone(180, 0.22, "sawtooth", 0.12, 0, 90),
+    beep: hi => tone(hi ? 1200 : 600, hi ? 0.35 : 0.15, "square", 0.08),
+    jackpot: () => { [523, 659, 784, 1046, 1318, 1568].forEach((f, i) => tone(f, 0.25, "square", 0.07, i * 0.09)); },
+  };
+  function setPour(on, fill = 0) {
+    if (!AC) return;
+    const t = AC.currentTime;
+    pourGain.gain.setTargetAtTime(on ? 0.22 : 0, t, 0.03);
+    pourFilter.frequency.setTargetAtTime(300 + fill * 900, t, 0.05);
+  }
+
+  // ---------- Game state ----------
+  const G = { state: "title", time: ROUND, served: 0, tickets: 0, perfects: 0, spills: 0, orders: [], cup: null,
+              held: new Set(), pourLever: -1, lock: 0, cleanup: 0, wrongAt: -1, wrongT: 0, countdown: 0,
+              floats: [], drops: [], puddle: 0, shake: 0, flash: 0, served50: false, clock: 0 };
+  let best = 0;
+  try { best = +localStorage.getItem("slushRushBest") || 0; } catch (_) {}
+
+  function makeOrder(prev) {
+    let f; do { f = Math.floor(Math.random() * 5); } while (prev && f === prev.flavor && Math.random() < 0.6);
+    const r = Math.random(), s = r < 0.4 ? 0 : r < 0.78 ? 1 : 2;
+    return { flavor: f, size: s };
+  }
+  function newCup(fromX) {
+    const o = G.orders.shift();
+    G.orders.push(makeOrder(G.orders[G.orders.length - 1]));
+    G.cup = { ...o, fill: 0, x: fromX ?? colX(o.flavor), y: 0, leaving: 0, wobble: 0 };
+    renderRail();
+  }
+  function start() {
+    initAudio(); AC?.resume?.();
+    Object.assign(G, { state: "countdown", countdown: 3.0, time: ROUND, served: 0, tickets: 0, perfects: 0, spills: 0,
+      lock: 0, cleanup: 0, floats: [], drops: [], puddle: 0, served50: false, pourLever: -1, leaving: null });
+    G.held.clear();
+    G.orders = []; let p; for (let i = 0; i < 4; i++) { p = makeOrder(p); G.orders.push(p); }
+    newCup(); G.cup.x = -0.2 * W;
+    $("titleScreen").hidden = true; $("overScreen").hidden = true;
+    sfx.beep(false); G.lastBeep = 3;
+    updateHud();
+  }
+  function end() {
+    G.state = "over"; setPour(false);
+    if (G.tickets > best) { best = G.tickets; try { localStorage.setItem("slushRushBest", best); } catch (_) {} }
+    $("overTitle").textContent = G.served50 ? "JACKPOT!" : "Time's up!";
+    $("rTickets").textContent = G.tickets; $("rCups").textContent = G.served;
+    $("rPerfect").textContent = G.perfects; $("rSpills").textContent = G.spills; $("rBest").textContent = best;
+    $("overScreen").hidden = false;
+    setTimeout(() => $("againBtn").focus({ preventScroll: true }), 50);
+  }
+  $("startBtn").onclick = start; $("againBtn").onclick = start;
+
+  function press(i) {
+    leverEls[i].classList.add("down");
+    G.held.add(i);
+    if (G.state !== "play" || G.pourLever !== -1 || G.lock > 0 || G.cleanup > 0) return;
+    G.pourLever = i;
+    if (!G.cup || G.cup.leaving || i !== G.cup.flavor) {
+      // Wrong flavor: slush hits the drip tray
+      G.wrongAt = i; G.wrongT = 0.35; G.lock = WRONG_LOCK; G.pourLever = -1;
+      for (let k = 0; k < 14; k++) G.drops.push(drop(colX(i), trayY() - 4, FLAVORS[i].c));
+      addFloat(colX(i), trayY() - 60, "Wrong flavor!", "#ff5a5f", 18);
+      sfx.wrong(); G.shake = 0.15;
+    }
+  }
+  function release(i) {
+    leverEls[i].classList.remove("down");
+    G.held.delete(i);
+    if (G.pourLever !== i) return;
+    G.pourLever = -1; setPour(false);
+    const c = G.cup;
+    if (G.state === "play" && c && !c.leaving && c.fill >= FILL_LINE) serve();
+  }
+  function serve() {
+    const c = G.cup, sz = SIZES[c.size];
+    const perfect = c.fill >= PERFECT_LO && c.fill <= PERFECT_HI;
+    let t = sz.tix + (perfect ? 2 : 0);
+    G.served++; G.tickets += t;
+    if (perfect) { G.perfects++; sfx.perfect(); addFloat(c.x, cupTop(c) - 40, "PERFECT POUR!", "#ffd23f", 26); G.flash = 0.25; }
+    else sfx.serve();
+    addFloat(c.x, cupTop(c) - 12, `+${t}`, "#0a1636", 22);
+    if (G.served === GOAL) { G.served50 = true; G.tickets += JACKPOT; sfx.jackpot(); addFloat(W / 2, H * 0.45, `+${JACKPOT} BONUS!`, "#e3202f", 40); G.flash = 0.6; }
+    c.leaving = 0.001;
+    updateHud();
+  }
+  function overflow() {
+    const c = G.cup;
+    G.spills++; G.cleanup = CLEANUP; G.pourLever = -1; setPour(false);
+    splat(); G.shake = 0.3; G.puddle = 1;
+    for (let k = 0; k < 30; k++) G.drops.push(drop(c.x, cupTop(c), FLAVORS[c.flavor].c, true));
+    addFloat(c.x, cupTop(c) - 30, "SPILL!", "#ff5a5f", 30);
+    c.fill = 0; c.spilled = true;
+  }
+
+  // ---------- Geometry ----------
+  const colW = () => W / 5;
+  const colX = i => colW() * (i + 0.5);
+  const mixerBottom = () => H * 0.30;
+  const nozzleY = () => H * 0.40;
+  const trayY = () => H * 0.93;
+  function cupDims(c) {
+    const avail = trayY() - nozzleY() - 26;
+    const h = avail * SIZES[c.size].h;
+    const w = Math.min(colW() * 0.78, h * 0.78 + 12);
+    return { h, w, bw: w * 0.72 };
+  }
+  const cupTop = c => trayY() - cupDims(c).h + (c.y || 0);
+
+  // ---------- Effects ----------
+  function addFloat(x, y, text, color, size) { G.floats.push({ x, y, text, color, size, t: 0 }); }
+  function drop(x, y, color, big) {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * (big ? 2.6 : 1.8);
+    const v = (big ? 240 : 160) * (0.5 + Math.random());
+    return { x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, r: 2 + Math.random() * (big ? 5 : 3), color, life: 1 };
+  }
+
+  // ---------- HUD ----------
+  function updateHud() {
+    $("timeVal").textContent = Math.max(0, G.time).toFixed(1);
+    const fr = Math.max(0, G.time / ROUND);
+    const tf = $("timeFill"); tf.style.transform = `scaleX(${fr})`;
+    tf.style.background = G.time < 10 ? "var(--bad)" : "var(--good)";
+    $("cupsVal").textContent = G.served;
+    $("ticketVal").textContent = G.tickets;
+    $("bonusNum").textContent = G.served50 ? "WON!" : JACKPOT;
+  }
+  function renderRail() {
+    const c = G.cup;
+    if (c) {
+      $("nowSw").style.background = FLAVORS[c.flavor].c;
+      $("nowTxt").textContent = `${SIZES[c.size].name} ${FLAVORS[c.flavor].name}`;
+      $("nowSize").textContent = SIZES[c.size].id;
+    }
+    const nx = $("next");
+    nx.querySelectorAll(".chip").forEach(e => e.remove());
+    G.orders.slice(0, 3).forEach(o => {
+      const d = document.createElement("span"); d.className = "chip";
+      d.style.background = FLAVORS[o.flavor].c; d.style.height = (12 + o.size * 6) + "px";
+      nx.appendChild(d);
+    });
+  }
+
+  // ---------- Loop ----------
+  function resize() {
+    const r = cv.getBoundingClientRect();
+    dpr = Math.min(2, window.devicePixelRatio || 1);
+    W = r.width; H = r.height;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+    if (G.cup && !G.cup.leaving) G.cup.x = colX(G.cup.flavor);
+  }
+  new ResizeObserver(resize).observe(cv);
+
+  let last = performance.now();
+  function frame(now) {
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    update(dt); draw(); requestAnimationFrame(frame);
+  }
+  function update(dt) {
+    G.clock += dt;
+    if (G.state === "countdown") {
+      G.countdown -= dt;
+      const s = Math.ceil(G.countdown);
+      if (s !== G.lastBeep && s > 0) { G.lastBeep = s; sfx.beep(false); }
+      if (G.countdown <= 0) { G.state = "play"; sfx.beep(true); addFloat(W / 2, H * 0.55, "GO!", "#e3202f", 64);
+        // honor a lever already held at GO
+        const h = [...G.held][0]; if (h !== undefined) press(h); }
+    }
+    if (G.state === "play") {
+      G.time -= dt;
+      if (G.time <= 0) { G.time = 0; updateHud(); end(); }
+    }
+    G.lock = Math.max(0, G.lock - dt);
+    G.wrongT = Math.max(0, G.wrongT - dt);
+    G.shake = Math.max(0, G.shake - dt);
+    G.flash = Math.max(0, G.flash - dt);
+    if (G.cleanup > 0) {
+      G.cleanup -= dt;
+      G.puddle = Math.max(0, G.cleanup / CLEANUP);
+      if (G.cleanup <= 0) { G.cleanup = 0; G.cup.spilled = false; }
+    }
+
+    const c = G.cup;
+    if (c) {
+      const tx = colX(c.flavor);
+      c.x += (tx - c.x) * Math.min(1, dt * 18);
+      c.wobble *= Math.pow(0.02, dt);
+      if (G.state === "play" && G.pourLever === c.flavor && !c.leaving && Math.abs(c.x - tx) < colW() * 0.25) {
+        c.fill += dt / SIZES[c.size].pour;
+        c.wobble = 1;
+        setPour(true, c.fill);
+        if (c.fill > 1.0) overflow();
+      }
+      if (c.leaving) {
+        c.leaving += dt;
+        c.y = -Math.pow(c.leaving * 7, 2) * 18;
+        if (c.leaving > 0.16) {
+          const x = c.x; newCup(x);
+          // a held lever keeps pouring into the next cup only if it matches
+          if (G.state === "play") { const h = G.pourLever; if (h !== -1 && h !== G.cup.flavor) { G.pourLever = -1; setPour(false); } }
+        }
+      }
+    }
+    if (G.state === "play" && G.clock - (G.hudT || 0) > 0.05) { G.hudT = G.clock; updateHud(); }
+
+    for (const f of G.floats) f.t += dt;
+    G.floats = G.floats.filter(f => f.t < 0.9);
+    for (const d of G.drops) { d.vy += 900 * dt; d.x += d.vx * dt; d.y += d.vy * dt; if (d.y > trayY()) { d.y = trayY(); d.vy *= -0.2; d.vx *= 0.6; } d.life -= dt * 1.2; }
+    G.drops = G.drops.filter(d => d.life > 0);
+  }
+
+  // ---------- Drawing ----------
+  function rr(x, y, w, h, r) { ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x, y, w, h, r) : ctx.rect(x, y, w, h); }
+  function draw() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    let sx = 0, sy = 0;
+    if (G.shake > 0 && !matchMedia("(prefers-reduced-motion: reduce)").matches) { sx = (Math.random() - 0.5) * 10 * G.shake / 0.3; sy = (Math.random() - 0.5) * 6 * G.shake / 0.3; }
+    ctx.translate(sx, sy);
+    const cw = colW(), mB = mixerBottom(), nY = nozzleY(), tY = trayY(), t = G.clock;
+
+    // Machine back panel
+    const bg = ctx.createLinearGradient(0, 0, 0, H);
+    bg.addColorStop(0, "#f4fbff"); bg.addColorStop(1, "#cfe6f7");
+    ctx.fillStyle = bg; ctx.fillRect(-20, -20, W + 40, H + 40);
+    // red and blue face stripes
+    ctx.fillStyle = "#e3202f"; ctx.fillRect(-20, mB + 4, W + 40, (nY - mB) * 0.42);
+    ctx.fillStyle = "#1b5fd9"; ctx.fillRect(-20, mB + 4 + (nY - mB) * 0.42, W + 40, 6);
+
+    // Mixer bowls
+    for (let i = 0; i < 5; i++) {
+      const f = FLAVORS[i], x = i * cw + cw * 0.08, w = cw * 0.84, y = H * 0.025, h = mB - y;
+      ctx.save();
+      rr(x, y, w, h, [w * 0.45, w * 0.45, 10, 10]); ctx.clip();
+      ctx.fillStyle = f.c; ctx.fillRect(x, y, w, h);
+      // swirl bands
+      ctx.globalAlpha = 0.35; ctx.fillStyle = f.hi;
+      const speed = (G.pourLever === i ? 3 : 1);
+      for (let k = -3; k < 8; k++) {
+        const off = ((t * 28 * speed) % 24);
+        ctx.beginPath();
+        const yy = y + k * 24 + off;
+        ctx.moveTo(x, yy); ctx.quadraticCurveTo(x + w / 2, yy + 14 * Math.sin(t * 2 + k), x + w, yy);
+        ctx.lineTo(x + w, yy + 9); ctx.quadraticCurveTo(x + w / 2, yy + 9 + 14 * Math.sin(t * 2 + k), x, yy + 9);
+        ctx.fill();
+      }
+      // frost speckle
+      ctx.globalAlpha = 0.5; ctx.fillStyle = "#fff";
+      for (let k = 0; k < 18; k++) { const px = x + ((k * 37.7 + i * 13) % w), py = y + ((k * 53.3 + t * 20 * speed) % h); ctx.fillRect(px, py, 2, 2); }
+      ctx.globalAlpha = 1;
+      // auger
+      ctx.strokeStyle = "#ffffffaa"; ctx.lineWidth = 3;
+      ctx.beginPath();
+      for (let yy = y + 10; yy < y + h; yy += 3) { const xx = x + w / 2 + Math.sin(yy * 0.12 - t * 6 * speed) * w * 0.22; yy === y + 10 ? ctx.moveTo(xx, yy) : ctx.lineTo(xx, yy); }
+      ctx.stroke();
+      // glass highlight
+      const gl = ctx.createLinearGradient(x, 0, x + w, 0);
+      gl.addColorStop(0, "#ffffff00"); gl.addColorStop(0.18, "#ffffff88"); gl.addColorStop(0.3, "#ffffff00");
+      ctx.fillStyle = gl; ctx.fillRect(x, y, w, h);
+      ctx.restore();
+      rr(x, y, w, h, [w * 0.45, w * 0.45, 10, 10]); ctx.strokeStyle = "#0a163633"; ctx.lineWidth = 2; ctx.stroke();
+
+      // flavor label on red band
+      let fs = Math.min(13, cw * 0.11);
+      ctx.font = `800 ${fs}px Rubik, system-ui, sans-serif`;
+      const tw = ctx.measureText(f.name.toUpperCase()).width;
+      if (tw > cw * 0.9) { fs *= (cw * 0.9) / tw; ctx.font = `800 ${fs}px Rubik, system-ui, sans-serif`; }
+      ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(f.name.toUpperCase(), colX(i), mB + 4 + (nY - mB) * 0.21);
+
+      // nozzle
+      const nx = colX(i), nw = Math.min(26, cw * 0.22);
+      ctx.fillStyle = "#56627a"; rr(nx - nw / 2, mB + (nY - mB) * 0.5, nw, (nY - mB) * 0.5, 4); ctx.fill();
+      ctx.fillStyle = "#2c3446"; rr(nx - nw * 0.32, nY - 4, nw * 0.64, 10, 3); ctx.fill();
+      // lever handle indicator
+      const down = G.held.has(i);
+      ctx.fillStyle = f.c; rr(nx + nw / 2 + 2, mB + (nY - mB) * (down ? 0.62 : 0.5), 8, (nY - mB) * 0.36, 4); ctx.fill();
+    }
+
+    // Drip tray
+    ctx.fillStyle = "#2c3446"; ctx.fillRect(-20, tY, W + 40, H - tY + 20);
+    ctx.fillStyle = "#56627a";
+    for (let x = 4; x < W; x += 10) ctx.fillRect(x, tY + 3, 5, H - tY - 6);
+
+    // Puddle
+    if (G.puddle > 0 && G.cup) {
+      ctx.globalAlpha = 0.85 * G.puddle; ctx.fillStyle = FLAVORS[G.cup.flavor].c;
+      ctx.beginPath(); ctx.ellipse(G.cup.x, tY + 4, cw * 0.9, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.globalAlpha = 1;
+    }
+
+    // Pour stream
+    const c = G.cup;
+    if (G.state === "play" && G.pourLever !== -1 && c) {
+      const i = G.pourLever, x = colX(i), endY = c.flavor === i ? cupTop(c) + cupDims(c).h * (1 - Math.min(1, c.fill)) : tY;
+      drawStream(x, nY + 6, endY, FLAVORS[i]);
+    }
+    if (G.wrongT > 0) drawStream(colX(G.wrongAt), nY + 6, tY, FLAVORS[G.wrongAt], G.wrongT / 0.35);
+
+    // Cup
+    if (c) drawCup(c);
+
+    // Drops
+    for (const d of G.drops) { ctx.globalAlpha = Math.max(0, d.life); ctx.fillStyle = d.color; ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2); ctx.fill(); }
+    ctx.globalAlpha = 1;
+
+    // Cleanup banner
+    if (G.cleanup > 0) {
+      const bw = Math.min(260, W * 0.7), bx = W / 2 - bw / 2, by = H * 0.48;
+      ctx.fillStyle = "#0a1636e6"; rr(bx, by, bw, 54, 12); ctx.fill();
+      ctx.fillStyle = "#fff"; ctx.font = `24px "Lilita One", sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("CLEANUP!", W / 2, by + 20);
+      ctx.fillStyle = "#ffffff30"; rr(bx + 16, by + 38, bw - 32, 7, 4); ctx.fill();
+      ctx.fillStyle = "#ffd23f"; rr(bx + 16, by + 38, (bw - 32) * (1 - G.cleanup / CLEANUP), 7, 4); ctx.fill();
+    }
+
+    // Floats
+    for (const f of G.floats) {
+      const k = f.t / 0.9;
+      ctx.globalAlpha = 1 - k * k;
+      ctx.font = `${f.size * (1 + 0.15 * Math.sin(Math.min(1, k * 4) * Math.PI))}px "Lilita One", sans-serif`;
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.lineWidth = 5; ctx.strokeStyle = "#fff"; ctx.strokeText(f.text, f.x, f.y - k * 40);
+      ctx.fillStyle = f.color; ctx.fillText(f.text, f.x, f.y - k * 40);
+    }
+    ctx.globalAlpha = 1;
+
+    // Countdown
+    if (G.state === "countdown") {
+      const n = Math.ceil(G.countdown), k = G.countdown - Math.floor(G.countdown);
+      ctx.fillStyle = "#0a163699"; ctx.fillRect(-20, -20, W + 40, H + 40);
+      ctx.font = `${90 + 40 * k}px "Lilita One", sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.lineWidth = 8; ctx.strokeStyle = "#1b5fd9"; ctx.strokeText(n, W / 2, H / 2);
+      ctx.fillStyle = "#fff"; ctx.fillText(n, W / 2, H / 2);
+    }
+    if (G.flash > 0) { ctx.fillStyle = `rgba(255,210,63,${G.flash * 0.5})`; ctx.fillRect(-20, -20, W + 40, H + 40); }
+  }
+
+  function drawStream(x, y0, y1, f, alpha = 1) {
+    if (y1 <= y0) return;
+    ctx.globalAlpha = alpha;
+    const w = Math.min(14, colW() * 0.12), t = G.clock;
+    ctx.fillStyle = f.c;
+    ctx.beginPath();
+    ctx.moveTo(x - w / 2, y0);
+    for (let y = y0; y <= y1; y += 6) ctx.lineTo(x - w / 2 + Math.sin(y * 0.15 + t * 30) * 1.6, y);
+    for (let y = y1; y >= y0; y -= 6) ctx.lineTo(x + w / 2 + Math.sin(y * 0.15 + t * 30 + 1) * 1.6, y);
+    ctx.fill();
+    ctx.fillStyle = f.hi; ctx.fillRect(x - w * 0.15, y0, w * 0.18, y1 - y0);
+    ctx.globalAlpha = 1;
+  }
+
+  function drawCup(c) {
+    const { h, w, bw } = cupDims(c);
+    const top = cupTop(c), bot = top + h, x = c.x, f = FLAVORS[c.flavor];
+    const alpha = c.leaving ? Math.max(0, 1 - c.leaving / 0.16) : 1;
+    ctx.save(); ctx.globalAlpha = alpha;
+    const path = () => { ctx.beginPath(); ctx.moveTo(x - w / 2, top); ctx.lineTo(x + w / 2, top); ctx.lineTo(x + bw / 2, bot); ctx.lineTo(x - bw / 2, bot); ctx.closePath(); };
+    // shadow
+    ctx.fillStyle = "#0003"; ctx.beginPath(); ctx.ellipse(x, trayY() + 2, bw * 0.6, 5, 0, 0, Math.PI * 2); ctx.fill();
+    // cup body
+    path(); ctx.fillStyle = "#ffffffcc"; ctx.fill();
+    // slush fill
+    ctx.save(); path(); ctx.clip();
+    const fl = Math.min(1, c.fill), sy = bot - h * fl;
+    if (fl > 0) {
+      ctx.fillStyle = f.c; ctx.fillRect(x - w, sy, w * 2, h * fl + 2);
+      // wobbly top
+      ctx.beginPath(); ctx.moveTo(x - w, sy + 2);
+      for (let k = 0; k <= 12; k++) { const xx = x - w / 2 + (w * k) / 12; ctx.lineTo(xx, sy - 3 - Math.sin(k * 1.3 + G.clock * 18) * 2.5 * c.wobble); }
+      ctx.lineTo(x + w, sy + 2); ctx.fill();
+      ctx.fillStyle = "#ffffff55";
+      for (let k = 0; k < 26; k++) { const px = x - w / 2 + ((k * 29.3) % w), py = sy + ((k * 41.7) % Math.max(1, h * fl)); ctx.fillRect(px, py, 2.5, 2.5); }
+    }
+    ctx.restore();
+    // ICEE-style cup band
+    const bandY = top + h * 0.38, bandH = Math.max(10, h * 0.16);
+    ctx.save(); path(); ctx.clip();
+    ctx.fillStyle = "#e3202fdd"; ctx.fillRect(x - w, bandY, w * 2, bandH * 0.55);
+    ctx.fillStyle = "#1b5fd9dd"; ctx.fillRect(x - w, bandY + bandH * 0.55, w * 2, bandH * 0.45);
+    ctx.fillStyle = "#fff"; ctx.font = `${Math.max(10, bandH * 0.5)}px "Lilita One", sans-serif`; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(SIZES[c.size].id, x, bandY + bandH * 0.3);
+    ctx.restore();
+    // outline + rim
+    path(); ctx.strokeStyle = "#0a163655"; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = "#fff"; rr(x - w / 2 - 3, top - 3, w + 6, 6, 3); ctx.fill(); ctx.strokeStyle = "#0a163644"; ctx.lineWidth = 1; ctx.stroke();
+    // fill line + perfect zone
+    const lineY = bot - h * FILL_LINE, pLo = bot - h * PERFECT_LO, pHi = bot - h * PERFECT_HI;
+    const edge = (yy) => (w / 2) - ((w - bw) / 2) * ((yy - top) / h);
+    ctx.fillStyle = "#ffd23f66"; ctx.fillRect(x + edge(pLo) - 8, pHi, 8, pLo - pHi);
+    ctx.strokeStyle = "#0a1636"; ctx.setLineDash([5, 4]); ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(x - edge(lineY) + 2, lineY); ctx.lineTo(x + edge(lineY) - 2, lineY); ctx.stroke(); ctx.setLineDash([]);
+    // fill line arrow
+    ctx.fillStyle = "#0a1636"; ctx.beginPath(); const ax = x + edge(lineY) + 3; ctx.moveTo(ax, lineY); ctx.lineTo(ax + 8, lineY - 5); ctx.lineTo(ax + 8, lineY + 5); ctx.fill();
+    // "ready" glow when releasable
+    if (c.fill >= FILL_LINE && !c.leaving) { path(); ctx.strokeStyle = c.fill >= PERFECT_LO && c.fill <= PERFECT_HI ? "#ffd23f" : "#3ee08a"; ctx.lineWidth = 4; ctx.stroke(); }
+    ctx.restore();
+  }
+
+  // ---------- Boot ----------
+  resize(); renderRail(); updateHud();
+  // Sample cup on the title screen so the machine reads at a glance
+  G.orders = [makeOrder(), makeOrder(), makeOrder(), makeOrder()]; newCup(); G.cup.fill = 0.55;
+  requestAnimationFrame(frame);
+})();
+</script>
