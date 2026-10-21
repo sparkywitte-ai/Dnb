@@ -47,7 +47,7 @@ body {
   border-radius: 18px 18px 8px 8px;
   background: linear-gradient(180deg, var(--red), #b5121f);
   padding: 8px 14px 10px;
-  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px;
   box-shadow: 0 0 0 3px #fff2 inset, 0 6px 24px #e3202f55;
   overflow: hidden;
 }
@@ -58,8 +58,10 @@ body {
 }
 #topper::before { top: 1px; } #topper::after { bottom: 1px; animation-direction: reverse; }
 @keyframes chase { to { background-position: 14px 0; } }
+.bear { width: clamp(40px, 10vw, 56px); height: auto; filter: drop-shadow(0 3px 0 #0004); }
+.bear.big { width: 84px; margin-bottom: -6px; }
 .logo { font-family: var(--display); font-size: clamp(24px, 6vw, 38px); line-height: 0.95; letter-spacing: 0.5px; color: #fff; text-shadow: 0 3px 0 var(--blue), 0 5px 0 #0006; }
-.logo small { display: block; font-size: 0.48em; letter-spacing: 3px; color: var(--frost); text-shadow: none; font-family: var(--body); font-weight: 800; }
+.logo small { display: block; font-size: 0.42em; letter-spacing: 1.5px; white-space: nowrap; color: var(--frost); text-shadow: none; font-family: var(--body); font-weight: 800; }
 .bonus { background: #120a00; border-radius: 8px; padding: 2px 10px 4px; text-align: center; box-shadow: 0 0 0 2px #0008 inset; }
 .bonus .lbl { font: 600 10px var(--body); letter-spacing: 2px; color: #ffd23f99; text-transform: uppercase; }
 .bonus .num { font: 400 clamp(26px, 6vw, 36px)/1 var(--led-font); color: var(--led); text-shadow: 0 0 8px #ffd23faa; font-variant-numeric: tabular-nums; }
@@ -125,8 +127,26 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 @media (prefers-reduced-motion: reduce) { #topper::before, #topper::after { animation: none; } }
 </style>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <!-- Placeholder polar bear in the spirit of the cabinet's mascot art; swap for licensed ICEE artwork. -->
+    <g id="bearArt">
+      <circle cx="15" cy="16" r="9" fill="#fff"/><circle cx="49" cy="16" r="9" fill="#fff"/>
+      <circle cx="15" cy="16" r="4.5" fill="#bfe3ff"/><circle cx="49" cy="16" r="4.5" fill="#bfe3ff"/>
+      <ellipse cx="32" cy="35" rx="24" ry="22" fill="#fff"/>
+      <ellipse cx="32" cy="43" rx="11" ry="8.5" fill="#e8f4ff"/>
+      <ellipse cx="32" cy="38.5" rx="5" ry="3.6" fill="#0a1636"/>
+      <path d="M32 42v3.5M27.5 46.5q4.5 3.5 9 0" stroke="#0a1636" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <circle cx="23" cy="30" r="3" fill="#0a1636"/><circle cx="41" cy="30" r="3" fill="#0a1636"/>
+      <circle cx="24" cy="29" r="1" fill="#fff"/><circle cx="42" cy="29" r="1" fill="#fff"/>
+      <path d="M8 52q24 12 48 0l-2 7q-22 9-44 0z" fill="#e3202f"/>
+      <path d="M10 55q22 9 44 0" stroke="#1b5fd9" stroke-width="2.5" fill="none"/>
+    </g>
+  </defs>
+</svg>
 <div id="app">
   <header id="topper">
+    <svg class="bear" viewBox="0 0 64 64" aria-hidden="true"><use href="#bearArt"/></svg>
     <div class="logo">ICEE Slush Rush<small>SERVE 50 FOR THE BONUS</small></div>
     <div class="bonus"><div class="lbl">Bonus</div><div class="num" id="bonusNum">500</div></div>
   </header>
@@ -146,13 +166,14 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
     <canvas id="cv"></canvas>
     <div class="overlay" id="titleScreen">
       <div class="card">
+        <svg class="bear big" viewBox="0 0 64 64" aria-hidden="true"><use href="#bearArt"/></svg>
         <h2>Pour fast. Don't spill.</h2>
         <p>The line is out the door. You have 40 seconds to fill as many orders as you can.</p>
         <ul>
           <li>Hold the <b>flavor lever</b> under the waiting cup to pour.</li>
           <li>Let go once the slush passes the <b>fill line</b>. Stop near the top for a <b>Perfect Pour</b>.</li>
           <li>Overflow and you lose time to <b>cleanup</b>.</li>
-          <li>Serve all <b>50</b> to win the <b>500 ticket bonus</b>.</li>
+          <li>Serve all <b>50</b> customers to win the <b>500 ticket bonus</b>.</li>
         </ul>
         <button class="btn" id="startBtn">Start</button>
         <p class="hint">Keys 1–5 or A S D F G work on a keyboard.</p>
@@ -179,8 +200,9 @@ canvas { display: block; width: 100%; height: 100%; touch-action: none; }
 <script>
 (() => {
   const FLAVORS = [
-    { name: "Cherry",        c: "#e3202f", hi: "#ff6b74", key: ["1", "a"] },
-    { name: "Orange",        c: "#ff8a1f", hi: "#ffc077", key: ["2", "s"] },
+    // Lineup per Arcade Heroes' test-unit report (Sept 2024); Bay Tek's listing says Cherry/Apple instead.
+    { name: "Orange",        c: "#ff8a1f", hi: "#ffc077", key: ["1", "a"] },
+    { name: "Strawberry",    c: "#e8264f", hi: "#ff7d9a", key: ["2", "s"] },
     { name: "Banana",        c: "#f5cf2a", hi: "#fff08a", key: ["3", "d"] },
     { name: "Green Apple",   c: "#45c43a", hi: "#9cf08c", key: ["4", "f"] },
     { name: "Blue Raspberry",c: "#1b6dff", hi: "#7fb2ff", key: ["5", "g"] },
